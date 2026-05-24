@@ -9,7 +9,10 @@ A production-ready **Habit Formation Web Application** built with a clean modula
 ```
 habit-tracker/
 ├── backend/          # Node.js + Express + TypeScript + MongoDB
-└── frontend/         # React + TypeScript + Tailwind CSS
+├── frontend/         # React + TypeScript + Tailwind CSS
+└── .github/
+    └── workflows/
+        └── deploy.yml  # CI/CD — auto deploy frontend to Vercel on push to main
 ```
 
 ### Backend Architecture
@@ -32,8 +35,8 @@ src/
 │   └── user/, habit/, habitLog/
 ├── models/                          # Mongoose schemas
 ├── middlewares/
-│   ├── authMiddleware.ts            # JWT + refresh token
-│   ├── rateLimiter.ts               # Express rate limiting
+│   ├── authMiddleware.ts            # JWT + refresh token auto-rotation
+│   ├── rateLimiter.ts               # Express rate limiting (global + auth)
 │   ├── validateMiddleware.ts        # express-validator
 │   └── requestLogger.ts            # UUID request logging
 ├── routes/                          # Route definitions
@@ -49,9 +52,9 @@ src/
 
 ### Key Backend Patterns
 - **Generic Repository** — Base class with `create`, `findById`, `findOne`, `findAll`, `update`, `updateOne`, `delete`, `deleteMany`, `count`, `exists`
-- **Interface-driven** — Every layer has an interface (e.g. `IHabitService`, `IHabitRepository`)
-- **Class-based DI** — All classes receive dependencies via constructor injection
-- **Global Error Handler** — Catches all thrown errors, formats response uniformly
+- **Interface-driven** — Every layer has an interface (e.g. `IHabitService`, `IHabitRepository`) following the **Dependency Inversion Principle**
+- **Constructor-based DI** — All classes receive dependencies via constructor, wired through a central `dependencyInjector.ts`
+- **Global Error Handler** — Catches all thrown errors, formats response uniformly — no try/catch in repositories or services
 - **JWT Dual Token** — Access token (15m) + Refresh token (7d), both in HttpOnly cookies with auto-refresh middleware
 
 ---
@@ -97,7 +100,7 @@ npm run build
 npm start
 ```
 
-Backend runs on: `http://localhost:5000`
+Backend runs on: `http://localhost:5000`  
 Health check: `http://localhost:5000/health`
 
 ---
@@ -112,7 +115,71 @@ npm run dev
 
 Frontend runs on: `http://localhost:5173`
 
-> The Vite dev server proxies `/api` requests to `http://localhost:5000`, so no CORS issues in development.
+> The Vite dev server proxies `/api` requests to `http://127.0.0.1:5000`, so no CORS issues in development.
+
+---
+
+## 🔄 CI/CD Pipeline
+
+Frontend is automatically deployed to Vercel on every push to `main` via GitHub Actions.
+
+### Workflow — `.github/workflows/deploy.yml`
+
+```yaml
+name: Deploy Frontend to Vercel
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy to Vercel
+        run: vercel --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: ./frontend
+```
+
+### Required GitHub Secrets
+
+| Secret | How to get it |
+|--------|---------------|
+| `VERCEL_TOKEN` | vercel.com → Account Settings → Tokens → Create |
+| `VERCEL_ORG_ID` | Run `vercel link` locally → check `.vercel/project.json` |
+| `VERCEL_PROJECT_ID` | Same `.vercel/project.json` file |
+
+### Frontend `vercel.json`
+
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
+```
+
+---
+
+## 🌐 Live Deployments
+
+| Service | URL |
+|---------|-----|
+| Frontend (Vercel) | https://habit-tracker-five-liart.vercel.app |
+| Backend API (Railway) | https://habit-tracker-production-k.up.railway.app |
+| Health Check | https://habit-tracker-production-k.up.railway.app/health |
 
 ---
 
@@ -192,10 +259,10 @@ Indexes: { habitId, completedAt }, { userId, completedAt }
 
 ### Vercel (Frontend)
 
-1. Push `frontend/` to a GitHub repo
-2. Import in Vercel, set framework to **Vite**
-3. Add env variable: `VITE_API_URL=https://your-railway-backend.up.railway.app`
-4. Update `vite.config.ts` proxy target for production
+1. Push `frontend/` to GitHub
+2. Run `vercel link` locally to get `orgId` and `projectId`
+3. Add `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` to GitHub secrets
+4. Push to `main` — GitHub Actions handles the rest automatically
 
 ---
 
@@ -206,32 +273,8 @@ Indexes: { habitId, completedAt }, { userId, completedAt }
 - **Streak Tracking** — Auto-calculate current streak, longest streak on every toggle
 - **Dashboard** — Real-time stats, 7-day bar chart, top streak leaderboard
 - **Security** — Helmet, CORS, rate limiting (global + auth routes), input validation, bcrypt password hashing
+- **CI/CD** — GitHub Actions pipeline auto-deploys frontend to Vercel on push to main
 - **Responsive** — Full mobile support with collapsible navigation
 - **UX** — Loading states, error states, toast notifications, animated transitions
 
 ---
-
-## 📁 Evaluation Checklist
-
-| Requirement | Status |
-|-------------|--------|
-| User Auth (register/login/logout/JWT) | ✅ |
-| Secure password hashing (bcrypt x12) | ✅ |
-| Profile management | ✅ |
-| Create/Edit/Delete habits | ✅ |
-| Daily/Weekly goals | ✅ |
-| Mark habits as completed (toggle) | ✅ |
-| Streak count tracking | ✅ |
-| Dashboard with stats | ✅ |
-| Weekly progress chart | ✅ |
-| React + responsive design | ✅ |
-| Reusable components | ✅ |
-| Loading/error states | ✅ |
-| RESTful APIs | ✅ |
-| Input validation | ✅ |
-| Global error handling | ✅ |
-| MongoDB schema design | ✅ |
-| Query indexing | ✅ |
-| Protected routes | ✅ |
-| Environment variables | ✅ |
-| Clean architecture (Repository Pattern + DI) | ✅ |
